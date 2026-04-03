@@ -46,11 +46,12 @@ function Dashboard({ customers }) {
     { l: '방문완료+', n: M.vi, s: '명', bg: 'linear-gradient(135deg,#8b5cf6,#6d28d9)' },
   ];
 
+  const base = M.total || 1;
   const funnelData = [
-    { step: '1. 총 유입 (주소 입력)', cnt: 226, w: '100%', c: '#3b82f6' },
-    { step: '2. 창호 구성 완료', cnt: 143, w: '63.3%', c: '#6366f1' },
-    { step: '3. 견적 완료', cnt: M.total, w: (M.total / 226 * 100) + '%', c: '#8b5cf6' },
-    { step: '4. 상담 신청', cnt: M.co, w: Math.max(M.co / 226 * 100, 4) + '%', c: '#10b981' },
+    { step: '1. 총 고객', cnt: M.total, w: '100%', c: '#3b82f6' },
+    { step: '2. 상담 신청', cnt: M.co, w: Math.max(M.co / base * 100, M.co > 0 ? 4 : 0) + '%', c: '#6366f1' },
+    { step: '3. CRM 등록', cnt: M.rg, w: Math.max(M.rg / base * 100, M.rg > 0 ? 4 : 0) + '%', c: '#8b5cf6' },
+    { step: '4. 방문완료+', cnt: M.vi, w: Math.max(M.vi / base * 100, M.vi > 0 ? 4 : 0) + '%', c: '#10b981' },
   ];
 
   return (
@@ -85,7 +86,7 @@ function Dashboard({ customers }) {
               <div className="fbw">
                 <div className="fb" style={{ width: f.w, background: f.c }}></div>
               </div>
-              <div className="fn">{f.cnt}<span className="p">{pct(f.cnt, 226)}</span></div>
+              <div className="fn">{f.cnt}<span className="p">{pct(f.cnt, M.total)}</span></div>
             </div>
           ))}
         </div>
