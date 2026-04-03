@@ -1,35 +1,51 @@
-import { useState } from 'react';
-import { loadAccounts, saveAccounts } from '../utils/accounts';
+import { useState, useEffect } from 'react';
+import { fetchAccounts, insertAccount, deleteAccount } from '../utils/supabase';
 
 function AccountSettings({ onClose }) {
-  const [accounts, setAccounts] = useState(() => loadAccounts());
+  const [accounts, setAccounts] = useState([]);
   const [un, setUn] = useState('');
   const [li, setLi] = useState('');
   const [pw2, setPw2] = useState('');
   const [msg, setMsg] = useState('');
 
-  const create = () => {
+  useEffect(() => {
+    loadAccounts();
+  }, []);
+
+  const loadAccounts = async () => {
+    const data = await fetchAccounts();
+    setAccounts(data);
+  };
+
+  const create = async () => {
     if (!un.trim() || !li.trim() || !pw2.trim()) {
       return setMsg('모든 필드를 입력해주세요.');
     }
     if (accounts.some((a) => a.loginId === li.trim())) {
       return setMsg('이미 존재하는 아이디입니다.');
     }
-    const na = [...accounts, { username: un.trim(), loginId: li.trim(), password: pw2, role: 'user' }];
-    setAccounts(na);
-    saveAccounts(na);
-    setMsg('계정이 생성되었습니다.');
-    setUn('');
-    setLi('');
-    setPw2('');
+    const result = await insertAccount({
+      username: un.trim(),
+      loginId: li.trim(),
+      password: pw2,
+      role: 'user',
+    });
+    if (result) {
+      setMsg('계정이 생성되었습니다.');
+      setUn('');
+      setLi('');
+      setPw2('');
+      await loadAccounts();
+    } else {
+      setMsg('계정 생성에 실패했습니다.');
+    }
   };
 
-  const del = (lid) => {
+  const del = async (lid) => {
     if (lid === 'admin') return setMsg('관리자 계정은 삭제할 수 없습니다.');
     if (!confirm(`"${lid}" 계정을 삭제하시겠습니까?`)) return;
-    const na = accounts.filter((a) => a.loginId !== lid);
-    setAccounts(na);
-    saveAccounts(na);
+    await deleteAccount(lid);
+    await loadAccounts();
   };
 
   return (

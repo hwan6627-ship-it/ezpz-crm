@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { EZPZ_STATUSES, CRM_STATUSES, FIRST_FILTERS } from './utils/constants';
 import { now, getWeek, weekLabel } from './utils/helpers';
-import getDefaultCustomers from './data/customers';
+import { fetchCustomers, insertCustomer, insertCustomersBulk, updateCustomer } from './utils/supabase';
 
 import LoginPage from './components/LoginPage';
 import AccountSettings from './components/AccountSettings';
@@ -14,7 +14,8 @@ import BulkUploadModal from './components/BulkUploadModal';
 function App() {
   const [user, setUser] = useState(null);
   const [pg, setPg] = useState('dashboard');
-  const [cust, setCust] = useState(getDefaultCustomers);
+  const [cust, setCust] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // 필터 상태
   const [search, setSearch] = useState('');
@@ -38,6 +39,19 @@ function App() {
     name: '', phone: '', address: '',
     ezpzStatus: '견적만 완료', crmStatus: '미등록', assignee: '', firstFilter: '미진행',
   });
+
+  // DB에서 고객 데이터 불러오기
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const data = await fetchCustomers();
+    setCust(data);
+    setLoading(false);
+  }, []);
+
+  // 로그인 후 데이터 로드
+  useEffect(() => {
+    if (user) loadData();
+  }, [user, loadData]);
 
   const closeSel = () => setSel(null);
 
@@ -79,11 +93,16 @@ function App() {
     else { setSF(f); setSD('desc'); }
   };
 
-  // 고객 데이터 업데이트
-  const upd = useCallback((id, u) => {
+  // 고객 데이터 업데이트 (DB 연동)
+  const upd = useCallback(async (id, u) => {
     const ts = now();
+    // 화면 즉시 반영
     setCust((p) => p.map((c) => (c.id === id ? { ...c, ...u, updatedAt: ts } : c)));
     setSel((p) => (p?.id === id ? { ...p, ...u, updatedAt: ts } : p));
+    // DB에 저장 (actions 제외)
+    const dbUpdates = { ...u };
+    delete dbUpdates.actions;
+    await updateCustomer(id, dbUpdates);
   }, []);
 
   // CSV 다운로드
@@ -104,18 +123,35 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
-  // 신규 단건 등록
-  const addSingle = () => {
+  // 신규 단건 등록 (DB 연동)
+  const addSingle = async () => {
     if (!addForm.name.trim()) return;
-    const ts = now();
-    setCust((p) => [{ id: Date.now(), ...addForm, ezpzDate: ts, estimateCount: 1, updatedAt: ts, actions: [] }, ...p]);
+    const result = await insertCustomer({
+      ...addForm,
+      estimateCount: 1,
+    });
+    if (result) {
+      await loadData(); // DB에서 다시 불러오기
+    }
     setAddForm({ name: '', phone: '', address: '', ezpzStatus: '견적만 완료', crmStatus: '미등록', assignee: '', firstFilter: '미진행' });
     setShowAdd(false);
   };
 
-  // 대량 등록
-  const addBulkItems = (items) => {
-    setCust((p) => [...items, ...p]);
+  // 대량 등록 (DB 연동)
+  const addBulkItems = async (items) => {
+    const dbItems = items.map((item) => ({
+      name: item.name,
+      phone: item.phone,
+      address: item.address,
+      ezpzStatus: item.ezpzStatus,
+      ezpzDate: item.ezpzDate,
+      crmStatus: item.crmStatus,
+      assignee: item.assignee,
+      estimateCount: item.estimateCount || 1,
+      firstFilter: item.firstFilter || '미진행',
+    }));
+    await insertCustomersBulk(dbItems);
+    await loadData(); // DB에서 다시 불러오기
   };
 
   // 로그인 전
@@ -153,30 +189,38 @@ function App() {
 
       {/* 메인 콘텐츠 */}
       <div className="main">
-        {pg === 'dashboard' && <Dashboard customers={cust} />}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8', fontSize: 14 }}>
+            데이터를 불러오는 중...
+          </div>
+        ) : (
+          <>
+            {pg === 'dashboard' && <Dashboard customers={cust} />}
 
-        {pg === 'customers' && (
-          <CustomerTable
-            filtered={filtered}
-            search={search} setSearch={setSearch}
-            fE={fE} setFE={setFE}
-            fC={fC} setFC={setFC}
-            fF={fF} setFF={setFF}
-            fW={fW} setFW={setFW}
-            wList={wList}
-            sF={sF} sD={sD}
-            tgSort={tgSort}
-            upd={upd}
-            onSelectCustomer={(c) => setSel(c)}
-            onShowAdd={() => setShowAdd(true)}
-            onShowBulk={() => setShowBulk(true)}
-            downloadCSV={downloadCSV}
-          />
+            {pg === 'customers' && (
+              <CustomerTable
+                filtered={filtered}
+                search={search} setSearch={setSearch}
+                fE={fE} setFE={setFE}
+                fC={fC} setFC={setFC}
+                fF={fF} setFF={setFF}
+                fW={fW} setFW={setFW}
+                wList={wList}
+                sF={sF} sD={sD}
+                tgSort={tgSort}
+                upd={upd}
+                onSelectCustomer={(c) => setSel(c)}
+                onShowAdd={() => setShowAdd(true)}
+                onShowBulk={() => setShowBulk(true)}
+                downloadCSV={downloadCSV}
+              />
+            )}
+          </>
         )}
       </div>
 
       {/* 고객 상세 모달 */}
-      {sel && <CustomerDetailModal sel={sel} upd={upd} onClose={closeSel} />}
+      {sel && <CustomerDetailModal sel={sel} upd={upd} onClose={closeSel} onReload={loadData} />}
 
       {/* 신규 등록 모달 */}
       {showAdd && (

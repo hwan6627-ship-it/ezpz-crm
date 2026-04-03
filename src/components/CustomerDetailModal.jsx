@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
 import { EZPZ_STATUSES, CRM_STATUSES, FIRST_FILTERS, ACTION_TYPES } from '../utils/constants';
 import { getEzpzBadgeClass, getCrmBadgeClass, getFilterBadgeClass, now } from '../utils/helpers';
+import { insertAction, updateAction, deleteAction } from '../utils/supabase';
 
-function CustomerDetailModal({ sel, upd, onClose }) {
+function CustomerDetailModal({ sel, upd, onClose, onReload }) {
   const [showAF, setShowAF] = useState(false);
   const [editCrm, setEditCrm] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -46,27 +47,41 @@ function CustomerDetailModal({ sel, upd, onClose }) {
     reader.readAsDataURL(f);
   };
 
-  const addAction = () => {
+  const addActionHandler = async () => {
     if (!newAct.note.trim()) return;
-    const ts = now();
-    const act = { date: ts, type: newAct.type, note: newAct.note, author: newAct.author, file: newAct.file || null };
-    const updated = [...(sel.actions || []), act];
-    upd(sel.id, { actions: updated });
+    await insertAction(sel.id, {
+      type: newAct.type,
+      note: newAct.note,
+      author: newAct.author,
+      file: newAct.file || null,
+    });
     setNewAct({ type: '전화', note: '', author: '', file: null, filePreview: null });
     setShowAF(false);
+    if (onReload) await onReload();
   };
 
-  const delAction = (idx) => {
+  const delActionHandler = async (idx) => {
+    const action = sel.actions[idx];
+    if (action && action.dbId) {
+      await deleteAction(action.dbId);
+    }
+    // fallback: 로컬에서도 제거
     const updated = sel.actions.filter((_, i) => i !== idx);
     upd(sel.id, { actions: updated });
     setEaIdx(null);
+    if (onReload) await onReload();
   };
 
-  const saveEditAct = () => {
+  const saveEditActHandler = async () => {
     if (eaIdx === null) return;
+    const action = sel.actions[eaIdx];
+    if (action && action.dbId) {
+      await updateAction(action.dbId, eaNote);
+    }
     const updated = sel.actions.map((a, i) => (i === eaIdx ? { ...a, note: eaNote } : a));
     upd(sel.id, { actions: updated });
     setEaIdx(null);
+    if (onReload) await onReload();
   };
 
   return (
@@ -233,7 +248,7 @@ function CustomerDetailModal({ sel, upd, onClose }) {
                   <button className="bgh" onClick={() => { setShowAF(false); setNewAct({ type: '전화', note: '', author: '', file: null, filePreview: null }); }}>
                     취소
                   </button>
-                  <button className="btn bp bs" disabled={!newAct.note.trim()} onClick={addAction}>저장</button>
+                  <button className="btn bp bs" disabled={!newAct.note.trim()} onClick={addActionHandler}>저장</button>
                 </div>
               </div>
             )}
@@ -252,7 +267,7 @@ function CustomerDetailModal({ sel, upd, onClose }) {
                       <textarea rows={2} value={eaNote} onChange={(e) => setEaNote(e.target.value)} />
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
                         <button className="bgh" style={{ fontSize: 11 }} onClick={() => setEaIdx(null)}>취소</button>
-                        <button className="btn bp bx" onClick={saveEditAct}>저장</button>
+                        <button className="btn bp bx" onClick={saveEditActHandler}>저장</button>
                       </div>
                     </div>
                   ) : (
@@ -276,7 +291,7 @@ function CustomerDetailModal({ sel, upd, onClose }) {
                         <button className="bgh" style={{ fontSize: 10, padding: '2px 6px' }} onClick={(e) => { e.stopPropagation(); setEaIdx(rI); setEaNote(a.note); }}>
                           수정
                         </button>
-                        <button className="bdx" onClick={(e) => { e.stopPropagation(); if (confirm('삭제하시겠습니까?')) delAction(rI); }}>
+                        <button className="bdx" onClick={(e) => { e.stopPropagation(); if (confirm('삭제하시겠습니까?')) delActionHandler(rI); }}>
                           삭제
                         </button>
                       </div>

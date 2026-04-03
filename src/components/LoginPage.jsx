@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { loadAccounts } from '../utils/accounts';
-import { DEFAULT_ACCOUNTS } from '../utils/constants';
+import { loginCheck } from '../utils/supabase';
 
 function LoginPage({ onLogin }) {
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [remember, setRemember] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // 페이지 로드 시 저장된 아이디/비밀번호 불러오기
   useEffect(() => {
@@ -23,33 +23,22 @@ function LoginPage({ onLogin }) {
     }
   }, []);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setErr('');
+    setIsLoading(true);
     try {
-      const accounts = loadAccounts();
-      const acc = accounts.find((a) => a.loginId === id && a.password === pw);
+      const acc = await loginCheck(id, pw);
       if (acc) {
         handleRemember();
         onLogin(acc);
-        return;
+      } else {
+        setErr('아이디 또는 비밀번호가 올바르지 않습니다.');
       }
-      const defAcc = DEFAULT_ACCOUNTS.find((a) => a.loginId === id && a.password === pw);
-      if (defAcc) {
-        handleRemember();
-        onLogin(defAcc);
-        return;
-      }
-      setErr('아이디 또는 비밀번호가 올바르지 않습니다.');
     } catch (ex) {
-      const defAcc = DEFAULT_ACCOUNTS.find((a) => a.loginId === id && a.password === pw);
-      if (defAcc) {
-        handleRemember();
-        onLogin(defAcc);
-        return;
-      }
       setErr('로그인 처리 중 오류가 발생했습니다.');
     }
+    setIsLoading(false);
   };
 
   // 로그인 정보 저장/삭제
@@ -105,8 +94,8 @@ function LoginPage({ onLogin }) {
             </label>
           </div>
           {err && <div className="login-error">{err}</div>}
-          <button type="submit" className="login-btn" disabled={!id || !pw}>
-            로그인
+          <button type="submit" className="login-btn" disabled={!id || !pw || isLoading}>
+            {isLoading ? '로그인 중...' : '로그인'}
           </button>
         </form>
       </div>
